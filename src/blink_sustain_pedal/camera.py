@@ -9,9 +9,26 @@ frame available and stale frames are simply dropped. A monotonically increasing
 
 from __future__ import annotations
 
+import sys
 import threading
 
 import cv2
+
+_MACOS_PERMISSION_HINT = (
+    "On macOS this usually means the terminal app hosting this process has not "
+    "been granted camera access.\n"
+    "  1. System Settings → Privacy & Security → Camera → enable your terminal.\n"
+    "  2. If it isn't listed (macOS never prompted), reset and retry:\n"
+    "       tccutil reset Camera <your-terminal-bundle-id>\n"
+    "     e.g. for Warp:  tccutil reset Camera dev.warp.Warp-Stable\n"
+    "     then fully quit and reopen the terminal and run this again."
+)
+
+
+def _camera_error(prefix: str) -> str:
+    if sys.platform == "darwin":
+        return f"{prefix}\n{_MACOS_PERMISSION_HINT}"
+    return prefix
 
 
 class CameraStream:
@@ -32,8 +49,10 @@ class CameraStream:
         if not cap.isOpened():
             cap.release()
             raise RuntimeError(
-                f"Could not open camera index {self.index}. "
-                "Try `blink-sustain-pedal list-cameras`."
+                _camera_error(
+                    f"Could not open camera index {self.index}. "
+                    "Try `blink-sustain-pedal list-cameras`."
+                )
             )
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
@@ -50,7 +69,11 @@ class CameraStream:
         if not ok or frame is None:
             cap.release()
             self._cap = None
-            raise RuntimeError("Camera opened but returned no frames.")
+            raise RuntimeError(
+                _camera_error(
+                    f"Camera index {self.index} opened but returned no frames."
+                )
+            )
         with self._lock:
             self._frame = frame
             self._seq = 1
