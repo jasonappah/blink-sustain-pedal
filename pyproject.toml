@@ -1,0 +1,31 @@
+[project]
+name = "blink-sustain-pedal"
+version = "0.1.0"
+description = "Wink your eye, sustain your notes — a webcam-driven MIDI sustain pedal."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { file = "LICENSE" }
+dependencies = [
+    "typer>=0.12",
+    "mediapipe>=0.10.14",
+    "opencv-python>=4.9",
+    "mido>=1.3",
+    "python-rtmidi>=1.5",
+    "numpy>=1.26",
+]
+
+[project.scripts]
+blink-sustain-pedal = "blink_sustain_pedal.cli:app"
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/blink_sustain_pedal"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
