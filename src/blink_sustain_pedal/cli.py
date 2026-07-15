@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+import sys
 from typing import Annotated, Optional
 
 import typer
 
 from .gestures import Eye, WinkDetector
+
+_LOGGER_NAME = "blink_sustain_pedal"
 
 app = typer.Typer(
     add_completion=False,
@@ -25,6 +29,28 @@ OffOpt = Annotated[float, typer.Option("--off-threshold", help="Winking-eye scor
 OpenOpt = Annotated[float, typer.Option("--open-threshold", help="Max score of the *other* eye to still count as a wink.")]
 ReleaseOpt = Annotated[float, typer.Option("--release-ms", help="Hold after the eye reopens before releasing (ms).")]
 GpuOpt = Annotated[bool, typer.Option("--gpu", help="Try the Metal GPU delegate (CPU is default and usually faster here).")]
+
+
+def _setup_logging(log_file: Optional[str]) -> logging.Logger:
+    """Attach an action-log handler to the package logger (stderr, + optional file).
+
+    Timestamped events flow here from the pipeline. stderr keeps them off stdout so
+    a live `--profile` meter and `2> run.log` redirection both stay clean.
+    """
+    logger = logging.getLogger(_LOGGER_NAME)
+    logger.setLevel(logging.INFO)
+    logger.handlers.clear()
+    logger.propagate = False
+
+    console = logging.StreamHandler(sys.stderr)
+    console.setFormatter(logging.Formatter("%(asctime)s.%(msecs)03d  %(message)s", datefmt="%H:%M:%S"))
+    logger.addHandler(console)
+
+    if log_file:
+        file_handler = logging.FileHandler(log_file, mode="a")
+        file_handler.setFormatter(logging.Formatter("%(asctime)s  %(message)s"))
+        logger.addHandler(file_handler)
+    return logger
 
 
 def _build_detector(eye, on_t, off_t, open_t, release_ms) -> WinkDetector:
@@ -56,6 +82,7 @@ def run(
     release_ms: ReleaseOpt = 60.0,
     gpu: GpuOpt = False,
     profile: Annotated[bool, typer.Option("--profile", help="Print live fps / inference / frame-age timing.")] = False,
+    log_file: Annotated[Optional[str], typer.Option("--log-file", help="Append the timestamped action log to this file too.")] = None,
 ) -> None:
     """Detect winks and send MIDI sustain to a port (momentary: held wink = pedal down)."""
     # Imports deferred so `list-ports` / `--help` stay fast and don't need a camera.
@@ -70,6 +97,7 @@ def run(
     except RuntimeError as exc:
         raise typer.Exit(code=_fail(str(exc)))
 
+    logger = _setup_logging(log_file)
     landmarker = FaceBlendshapes(use_gpu=gpu)
     cam = CameraStream(index=camera, width=width, height=height, fps=fps)
     midi_out = None
@@ -78,8 +106,15 @@ def run(
         midi_out = midi_mod.SustainOutput(port_name, cc=midi_cc, channel=midi_channel).open()
         typer.echo(f"MIDI → {port_name}   (CC{midi_cc}, channel {midi_channel})")
         typer.echo(f"Eye: {eye.value}.  Wink to sustain — Ctrl-C to quit.")
+        logger.info(
+            "session start — port=%r cc=%d channel=%d eye=%s "
+            "thresholds on/off/open=%.2f/%.2f/%.2f release=%.0fms",
+            port_name, midi_cc, midi_channel, eye.value,
+            on_threshold, off_threshold, open_threshold, release_ms,
+        )
         run_pipeline(cam, landmarker, detector, midi_out, calibrate=False, profile=profile)
     finally:
+        logger.info("session end")
         if midi_out is not None:
             midi_out.close()
         cam.stop()

@@ -8,6 +8,7 @@ can show whether you are camera-bound (frame age dominates) or compute-bound
 
 from __future__ import annotations
 
+import logging
 import sys
 import time
 from typing import Callable
@@ -18,6 +19,10 @@ from .landmarker import FaceBlendshapes
 from .midi import SustainOutput
 
 _READOUT_HZ = 20.0
+
+# Action log. Emits nothing unless a handler is attached (the `run` command does
+# this); INFO messages with no handler are dropped, so `calibrate` stays quiet.
+logger = logging.getLogger(__name__)
 
 
 def run(
@@ -41,6 +46,9 @@ def run(
     fps_count = 0
     fps_since = start
 
+    had_face: bool | None = None   # None until the first frame is classified
+    down_since = 0.0               # monotonic time the pedal last went down
+
     try:
         while stop is None or not stop():
             seq, frame, stamp = camera.read_new(last_seq, timeout=0.1)
@@ -61,9 +69,27 @@ def run(
             blendshapes = landmarker.detect(frame, ts)
             infer_ms = (time.perf_counter() - t0) * 1000.0
 
+            face = bool(blendshapes)
+            if had_face is None:
+                had_face = face
+            elif face != had_face:
+                logger.info("face %s", "reacquired" if face else "lost")
+                had_face = face
+
             reading = detector.update(blendshapes, ts)
-            if reading.changed and midi is not None:
-                midi.set(reading.down)
+            if reading.changed:
+                if midi is not None:
+                    midi.set(reading.down)  # send first — logging must not add latency
+                if reading.down:
+                    down_since = proc_start
+                    eye = "left" if reading.left >= reading.right else "right"
+                    logger.info(
+                        "pedal DOWN   eye=%-5s wink=%.2f other=%.2f",
+                        eye, reading.wink_score, reading.other_score,
+                    )
+                else:
+                    held_ms = (proc_start - down_since) * 1000.0 if down_since else 0.0
+                    logger.info("pedal UP     held=%.0fms", held_ms)
 
             # --- timing stats ---
             ema_infer_ms = infer_ms if ema_infer_ms == 0.0 else 0.9 * ema_infer_ms + 0.1 * infer_ms

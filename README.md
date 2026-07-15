@@ -64,6 +64,23 @@ open your eye.
 
 Run `uv run blink-sustain-pedal run --help` for the full list.
 
+## Action log
+
+`run` prints a timestamped log of what it's doing to stderr — pedal presses (with
+which eye and the blink scores), how long each was held, and when your face leaves
+or re-enters the frame:
+
+```
+23:11:56.041  session start — port='IAC Driver Bus 1' cc=64 channel=1 eye=either ...
+23:11:58.212  pedal DOWN   eye=left  wink=0.90 other=0.05
+23:11:58.546  pedal UP     held=334ms
+23:12:03.118  face lost
+23:12:04.902  face reacquired
+```
+
+Add `--log-file run.log` to also append it to a file. Since the log is on stderr,
+it stays clear of a live `--profile` meter and you can redirect it with `2> run.log`.
+
 ## Lowering latency
 
 Run with `--profile` (or use `calibrate`, which always shows it) to see where time
