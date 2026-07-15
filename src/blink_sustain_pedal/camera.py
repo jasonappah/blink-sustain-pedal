@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import sys
 import threading
+import time
 
 import cv2
 
@@ -40,7 +41,8 @@ class CameraStream:
         self._cap: cv2.VideoCapture | None = None
         self._frame = None
         self._seq = 0
-        self._lock = threading.Lock()
+        self._stamp = 0.0  # time.monotonic() when the current frame was captured
+        self._cond = threading.Condition()
         self._running = False
         self._thread: threading.Thread | None = None
 
@@ -74,9 +76,10 @@ class CameraStream:
                     f"Camera index {self.index} opened but returned no frames."
                 )
             )
-        with self._lock:
+        with self._cond:
             self._frame = frame
             self._seq = 1
+            self._stamp = time.monotonic()
 
         self._running = True
         self._thread = threading.Thread(target=self._loop, name="camera", daemon=True)
@@ -86,19 +89,36 @@ class CameraStream:
     def _loop(self) -> None:
         assert self._cap is not None
         while self._running:
-            ok, frame = self._cap.read()
+            ok, frame = self._cap.read()  # blocks until the driver delivers a frame
+            stamp = time.monotonic()
             if not ok or frame is None:
                 continue
-            with self._lock:
+            with self._cond:
                 self._frame = frame
                 self._seq += 1
+                self._stamp = stamp
+                self._cond.notify_all()
 
     def read(self) -> tuple[int, object | None]:
         """Return ``(seq, frame_copy)``. ``seq`` is 0 and frame ``None`` before first frame."""
-        with self._lock:
+        with self._cond:
             if self._frame is None:
                 return 0, None
             return self._seq, self._frame.copy()
+
+    def read_new(self, last_seq: int, timeout: float = 0.1) -> tuple[int, object | None, float]:
+        """Block until a frame newer than ``last_seq`` arrives (or ``timeout`` s).
+
+        Returns ``(seq, frame_copy, capture_stamp)``. On timeout, frame is ``None``.
+        This is the low-latency path: the consumer wakes the instant the capture
+        thread posts a frame, with no polling gap.
+        """
+        with self._cond:
+            if self._seq == last_seq:
+                self._cond.wait(timeout)
+            if self._frame is None or self._seq == last_seq:
+                return last_seq, None, 0.0
+            return self._seq, self._frame.copy(), self._stamp
 
     def stop(self) -> None:
         self._running = False

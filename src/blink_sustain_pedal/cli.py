@@ -55,6 +55,7 @@ def run(
     open_threshold: OpenOpt = 0.4,
     release_ms: ReleaseOpt = 60.0,
     gpu: GpuOpt = False,
+    profile: Annotated[bool, typer.Option("--profile", help="Print live fps / inference / frame-age timing.")] = False,
 ) -> None:
     """Detect winks and send MIDI sustain to a port (momentary: held wink = pedal down)."""
     # Imports deferred so `list-ports` / `--help` stay fast and don't need a camera.
@@ -77,7 +78,7 @@ def run(
         midi_out = midi_mod.SustainOutput(port_name, cc=midi_cc, channel=midi_channel).open()
         typer.echo(f"MIDI → {port_name}   (CC{midi_cc}, channel {midi_channel})")
         typer.echo(f"Eye: {eye.value}.  Wink to sustain — Ctrl-C to quit.")
-        run_pipeline(cam, landmarker, detector, midi_out, calibrate=False)
+        run_pipeline(cam, landmarker, detector, midi_out, calibrate=False, profile=profile)
     finally:
         if midi_out is not None:
             midi_out.close()

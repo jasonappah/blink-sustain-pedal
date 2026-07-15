@@ -64,6 +64,34 @@ open your eye.
 
 Run `uv run blink-sustain-pedal run --help` for the full list.
 
+## Lowering latency
+
+Run with `--profile` (or use `calibrate`, which always shows it) to see where time
+goes:
+
+```bash
+uv run blink-sustain-pedal run --port IAC --profile
+#  → 60 fps  infer 6.2ms  frame-age 15.8ms
+```
+
+- **`frame-age` ≫ `infer`** (the usual case): you're **camera-bound**. Fixes, in order
+  of impact:
+  - **More light.** In dim rooms the camera lengthens exposure, which both blurs and
+    *slows* frames. Good lighting shortens exposure and often restores full fps.
+  - **Confirm real fps.** Many built-in cameras drop below their rated fps at higher
+    resolution or in low light. A 60/120 fps external webcam — or an iPhone via
+    Continuity Camera — delivers fresher frames. Lower `--width`/`--height` can unlock
+    a higher `--fps`.
+- **`infer` is high (>20ms):** try `--gpu` (Metal delegate — may or may not beat CPU;
+  measure), and keep your face in frame so MediaPipe stays in its cheap tracking path.
+- **Snappier feel, independent of the camera:**
+  - Lower `--on-threshold` (e.g. `0.35`) so the pedal engages *earlier* in the eyelid's
+    closing motion — trades a little false-trigger margin for lower attack latency.
+  - Lower `--release-ms` (e.g. `25`) for a crisper pedal-up.
+- **In Ableton:** the audio **buffer size** (Preferences → Audio) dominates *audible*
+  output latency. That said, sustain (CC64) is timing-forgiving — a few ms early/late is
+  inaudible — so chase single-digit milliseconds only if you actually feel it.
+
 ## macOS permissions
 
 The first time you run `calibrate` or `run` from your terminal, macOS will prompt
