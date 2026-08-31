@@ -2,6 +2,8 @@
 
 🎹 eyelid closed, pedal down.
 
+> Not using this anymore, I vibed [another thing](https://github.com/jasonappah/ipad-sustain-pedal) that covers my use-case much better, at the cost of having to wipe my iPad down after use :p
+
 A CLI that watches your webcam, detects a **single-eye wink**, and sends **MIDI
 sustain (CC64)** to an existing system MIDI port — so you can hold sustain in
 Ableton (or any DAW) without a hardware pedal. Inspired by Planning Center Music
